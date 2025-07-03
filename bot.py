@@ -64,10 +64,8 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
 
             tx = Transaction()
             tx.add_message(msg)
-            tx = tx.with_sender(sender_addr)
-            tx = tx.with_chain_id(CHAIN_ID)
-            tx = tx.with_fee(gas=gas_limit, amount=gas_fee)
-            tx_signed = tx.sign(sender_wallet)
+            tx.set_fee(gas_limit, gas_fee)
+            tx_signed = tx.build(sender_wallet)
 
             tx_resp = client.send_transaction(tx_signed)
             print(f"✅ Sent {amount_bbn} BBN from {sender_addr} to {recipient}")
@@ -86,7 +84,7 @@ def main():
     print("2 - Many-to-One (many senders to 1 recipient)")
     mode = input("Enter mode (1 or 2): ").strip()
 
-    amount = input("💰 Enter amount of BBN to send from each wallet: ").strip()
+    amount = input("\U0001f4b0 Enter amount of BBN to send from each wallet: ").strip()
     try:
         amount = float(amount)
         assert amount > 0
