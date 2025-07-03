@@ -8,10 +8,10 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Corrected Babylon Testnet configuration
+# Updated Babylon Testnet configuration with correct RPC
 BABYLON_CONFIG = NetworkConfig(
     chain_id=os.getenv("BABYLON_CHAIN_ID", "babylon-2"),
-    url=os.getenv("BABYLON_RPC_URL", "rest+https://rpc.babylon-2.btc.com"),  # Added rest+ prefix
+    url=os.getenv("BABYLON_RPC_URL", "rest+https://babylon-testnet-rpc.nodes.guru"),  # Updated RPC
     fee_minimum_gas_price=float(os.getenv("GAS_PRICE", 0.0025)),
     fee_denomination=os.getenv("DENOM", "ubbn"),
     staking_denomination=os.getenv("DENOM", "ubbn"),
@@ -37,7 +37,7 @@ def send_tokens(client, sender_wallet, recipient, amount, leave_amount=0.1):
     tx = Transaction()
     tx.add_bank_transfer(recipient, amount_to_send, "ubbn")
     
-    tx = client.finalize_and_broadcast(tx, sender_wallet)  # Fixed typo in method name
+    tx = client.finalize_and_broadcast(tx, sender_wallet)
     print(f"✅ Sent {amount_to_send}ubbn to {recipient[:10]}...")
     print(f"   Tx Hash: {tx.tx_hash}")
     return True
@@ -55,7 +55,7 @@ def many_to_one(client):
     recipient = input("Enter recipient address: ").strip()
     for seed in seeds:
         try:
-            wallet = get_wallet_from_seed(seed)  # Fixed typo in method name
+            wallet = get_wallet_from_seed(seed)
             balance = get_balance(client, wallet.address())
             print(f"\n🏦 Wallet: {wallet.address()}")
             print(f"   Balance: {balance}ubbn")
