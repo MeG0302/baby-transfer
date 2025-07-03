@@ -25,11 +25,12 @@ def get_wallet_from_seed(seed_phrase):
     mnemo = Mnemonic("english")
     seed = mnemo.to_seed(seed_phrase)
     
-    # Derive private key using Cosmos derivation path (44'/118'/0'/0/0)
+    # Derive private key using Cosmos derivation path (m/44'/118'/0'/0/0)
+    # Using the hardened derivation path (with 0x80000000)
     bip32_root = BIP32Key.fromEntropy(seed)
-    bip32_child = bip32_root.ChildKey(44 + BIP32Key.HARDEN) \
-                           .ChildKey(118 + BIP32Key.HARDEN) \
-                           .ChildKey(0 + BIP32Key.HARDEN) \
+    bip32_child = bip32_root.ChildKey(44 + 0x80000000) \
+                           .ChildKey(118 + 0x80000000) \
+                           .ChildKey(0 + 0x80000000) \
                            .ChildKey(0) \
                            .ChildKey(0)
     private_key = PrivateKey(bip32_child.PrivateKey())
