@@ -6,21 +6,21 @@ from cosmpy.aerial.wallet import LocalWallet
 from cosmpy.aerial.client import LedgerClient, NetworkConfig
 from cosmpy.aerial.tx import Transaction
 
-# Load .env
+# Load environment variables
 load_dotenv()
 RPC_URL = os.getenv("RPC_URL")
 CHAIN_ID = os.getenv("CHAIN_ID")
 
-# Load mnemonics
+# Load mnemonics from file
 with open("mnemonics.txt", "r") as f:
     MNEMONICS = [line.strip() for line in f if line.strip()]
 
-# Load recipients if needed
+# Load recipient wallet list
 def load_recipients():
     with open("wallets.txt", "r") as f:
         return [line.strip() for line in f if line.strip()]
 
-# Setup network config
+# Set up Babylon testnet client
 config = NetworkConfig(
     chain_id=CHAIN_ID,
     url=RPC_URL,
@@ -30,7 +30,7 @@ config = NetworkConfig(
 )
 client = LedgerClient(config)
 
-# Setup logger
+# Initialize log file
 log_file = "log.csv"
 if not os.path.exists(log_file):
     with open(log_file, "w", newline="") as f:
@@ -46,7 +46,7 @@ def log_tx(sender, recipient, amount, status, tx_hash="-"):
 def to_ubbn(bbn):
     return int(float(bbn) * 1_000_000)
 
-# Send BBN from sender to recipient
+# Send tokens if enough balance
 def send_tokens(sender_wallet, recipient, amount_bbn):
     sender_addr = str(sender_wallet.address())
     amount_ubbn = to_ubbn(amount_bbn)
@@ -77,7 +77,7 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
     )
     tx = tx.with_sender(sender_addr)
     tx = tx.with_chain_id(CHAIN_ID)
-    tx = tx.with_fee(gas=gas_limit, amount=to_ubbn(0.001))  # 0.001 ubbn gas
+    tx = tx.with_fee(gas=gas_limit, amount=to_ubbn(0.001))
     tx_signed = tx.sign(sender_wallet)
 
     try:
@@ -88,7 +88,7 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
         print(f"❌ Failed from {sender_addr} → {recipient}: {str(e)}")
         log_tx(sender_addr, recipient, amount_bbn, "Failed", str(e))
 
-# Main logic
+# Main program loop
 def main():
     print("Choose mode:")
     print("1 - One-to-Many (1 sender to many recipients)")
