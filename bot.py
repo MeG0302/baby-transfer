@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from cosmpy.aerial.wallet import LocalWallet
 from cosmpy.aerial.client import LedgerClient, NetworkConfig
 from cosmpy.aerial.tx import Transaction
+from cosmpy.aerial.tx_helpers import prepare_cosmos_sdk_bank_send_msg
 
 # Load .env variables
 load_dotenv()
@@ -48,13 +49,12 @@ def to_ubbn(bbn):
 def send_tokens(sender_wallet, recipient, amount_bbn):
     sender_addr = str(sender_wallet.address())
     amount_ubbn = to_ubbn(amount_bbn)
-    
     gas_limit = 80000
-    gas_fee = to_ubbn(0.002)  # Total gas fee = 0.002 BBN (safe estimate)
+    gas_fee = to_ubbn(0.002)
 
     try:
         balance_obj = client.query_bank_balance(sender_addr, denom="ubbn")
-        balance = int(balance_obj) if isinstance(balance_obj, int) else int(balance_obj.amount)
+        balance = int(balance_obj.amount)
         print(f"🧾 Balance of {sender_addr}: {balance / 1_000_000:.6f} BBN")
     except Exception as e:
         print(f"⚠️ Failed to fetch balance for {sender_addr}: {e}")
@@ -66,26 +66,32 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
         log_tx(sender_addr, recipient, amount_bbn, "Skipped: Low Balance")
         return
 
-    tx = Transaction()
-    tx.add_message(
-        sender_wallet.bank_send(
-            to_address=recipient,
-            amount=amount_ubbn,
-            denom="ubbn"
-        )
-    )
-    tx = tx.with_sender(sender_addr)
-    tx = tx.with_chain_id(CHAIN_ID)
-    tx = tx.with_fee(gas=gas_limit, amount=to_ubbn(0.002))
-    tx_signed = tx.sign(sender_wallet)
+    # Retry logic
+    for attempt in range(1, 4):
+        try:
+            msg = prepare_cosmos_sdk_bank_send_msg(
+                from_address=sender_addr,
+                to_address=recipient,
+                amount=amount_ubbn,
+                denom="ubbn"
+            )
+            tx = Transaction()
+            tx.add_message(msg)
+            tx = tx.with_sender(sender_addr)
+            tx = tx.with_chain_id(CHAIN_ID)
+            tx = tx.with_fee(gas=gas_limit, amount=to_ubbn(0.002))
+            tx_signed = tx.sign(sender_wallet)
 
-    try:
-        tx_resp = client.send_transaction(tx_signed)
-        print(f"✅ Sent {amount_bbn} BBN from {sender_addr} to {recipient}")
-        log_tx(sender_addr, recipient, amount_bbn, "Success", tx_resp.tx_hash)
-    except Exception as e:
-        print(f"❌ Failed from {sender_addr} → {recipient}: {str(e)}")
-        log_tx(sender_addr, recipient, amount_bbn, "Failed", str(e))
+            tx_resp = client.send_transaction(tx_signed)
+            print(f"✅ Sent {amount_bbn} BBN from {sender_addr} to {recipient}")
+            log_tx(sender_addr, recipient, amount_bbn, "Success", tx_resp.tx_hash)
+            break
+        except Exception as e:
+            print(f"⚠️ Attempt {attempt} failed for {sender_addr} → {recipient}: {str(e)}")
+            if attempt == 3:
+                log_tx(sender_addr, recipient, amount_bbn, "Failed after 3 retries", str(e))
+            else:
+                time.sleep(5)
 
 def main():
     print("Choose mode:")
