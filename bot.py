@@ -19,11 +19,6 @@ BABYLON_CONFIG = NetworkConfig(
     staking_denomination=os.getenv("DENOM", "ubbn"),
 )
 
-def validate_babylon_address(address):
-    """Validate Babylon testnet address format"""
-    # Current Babylon testnet addresses are 43 characters and start with 'bbn1'
-    return address.startswith("bbn1") and len(address) == 43
-
 def get_wallet_from_seed(seed_phrase):
     """Create wallet from seed phrase using BIP39/BIP44 derivation"""
     # Generate seed from mnemonic
@@ -57,7 +52,7 @@ def send_tokens(client, sender_wallet, recipient, amount, leave_amount=0.1):
         tx.add_bank_transfer(recipient, amount_to_send, "ubbn")
         
         tx = client.finalize_and_broadcast(tx, sender_wallet)
-        print(f"✅ Sent {amount_to_send}ubbn to {recipient[:10]}...")
+        print(f"✅ Sent {amount_to_send}ubbn to {recipient}")
         print(f"   Tx Hash: {tx.tx_hash}")
         return True
     except Exception as e:
@@ -78,13 +73,10 @@ def many_to_one(client):
         print("❌ No seed phrases found in seed.txt")
         return
     
-    while True:
-        recipient = input("Enter recipient Babylon address: ").strip()
-        if validate_babylon_address(recipient):
-            break
-        print("❌ Invalid address format. Must start with 'bbn1' and be 43 characters long")
-        print(f"Example valid address: bbn1hf9zkqvtfwwfn7e3cw8zwenxgrhfkyqsth22fw")
-        print(f"Length of entered address: {len(recipient)} characters")
+    recipient = input("Enter recipient address: ").strip()
+    if not recipient:
+        print("❌ No recipient address provided")
+        return
     
     for seed in seeds:
         try:
@@ -132,7 +124,7 @@ def one_to_many(client):
     try:
         wallet = get_wallet_from_seed(sender_seed)
         sender_balance = get_balance(client, wallet.address())
-        total_needed = amount * len([r for r in recipients if validate_babylon_address(r)])
+        total_needed = amount * len(recipients)
         
         print(f"\n👤 Sender: {wallet.address()}")
         print(f"   Balance: {sender_balance}ubbn")
@@ -143,10 +135,7 @@ def one_to_many(client):
             return
         
         for i, addr in enumerate(recipients, 1):
-            print(f"\nRecipient {i}/{len(recipients)}: {addr[:10]}...")
-            if not validate_babylon_address(addr):
-                print("⚠️ Invalid address format, skipping")
-                continue
+            print(f"\nRecipient {i}/{len(recipients)}: {addr}")
             send_tokens(client, wallet, addr, amount)
     except Exception as e:
         print(f"❌ Fatal error: {str(e)}")
