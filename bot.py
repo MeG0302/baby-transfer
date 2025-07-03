@@ -21,8 +21,8 @@ BABYLON_CONFIG = NetworkConfig(
 
 def validate_babylon_address(address):
     """Validate Babylon testnet address format"""
-    return (address.startswith("bbn1") and len(address) == 43) or \
-           (address.startswith("babylon1") and len(address) == 45)
+    # Current Babylon testnet addresses are 45 characters and start with 'bbn1'
+    return address.startswith("bbn1") and len(address) == 45
 
 def get_wallet_from_seed(seed_phrase):
     """Create wallet from seed phrase using BIP39/BIP44 derivation"""
@@ -82,7 +82,8 @@ def many_to_one(client):
         recipient = input("Enter recipient Babylon address: ").strip()
         if validate_babylon_address(recipient):
             break
-        print("❌ Invalid address format. Must start with 'bbn1' (43 chars) or 'babylon1' (45 chars)")
+        print("❌ Invalid address format. Must start with 'bbn1' and be 45 characters long")
+        print("Example: bbn1hf9zkqvtfwwfn7e3cw8zwenxgrhfkyqsth22fw")
     
     for seed in seeds:
         try:
