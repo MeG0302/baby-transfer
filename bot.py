@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from cosmpy.aerial.wallet import LocalWallet
 from cosmpy.aerial.client import LedgerClient, NetworkConfig
 from cosmpy.aerial.tx import Transaction
+from cosmpy.aerial.tx_helpers import prepare_and_broadcast_basic_transaction
 from cosmpy.protos.cosmos.bank.v1beta1.tx_pb2 import MsgSend
 from cosmpy.protos.cosmos.base.v1beta1.coin_pb2 import Coin
 
@@ -62,14 +63,16 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
                 amount=[Coin(denom="ubbn", amount=str(amount_ubbn))]
             )
 
-            tx = Transaction()
-            tx.add_message(msg)
-            tx.set_fee(gas_limit, gas_fee)
-            tx_signed = tx.build(sender_wallet)
+            tx_hash = prepare_and_broadcast_basic_transaction(
+                client=client,
+                wallet=sender_wallet,
+                messages=[msg],
+                gas=gas_limit,
+                fee=gas_fee
+            )
 
-            tx_resp = client.send_transaction(tx_signed)
             print(f"✅ Sent {amount_bbn} BBN from {sender_addr} to {recipient}")
-            log_tx(sender_addr, recipient, amount_bbn, "Success", tx_resp.tx_hash)
+            log_tx(sender_addr, recipient, amount_bbn, "Success", tx_hash)
             break
         except Exception as e:
             print(f"⚠️ Attempt {attempt} failed from {sender_addr} → {recipient}: {str(e)}")
