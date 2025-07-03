@@ -21,7 +21,8 @@ BABYLON_CONFIG = NetworkConfig(
 
 def validate_babylon_address(address):
     """Validate Babylon testnet address format"""
-    return address.startswith(("bbn1", "babylon1")) and len(address) == 45
+    return (address.startswith("bbn1") and len(address) == 43) or \
+           (address.startswith("babylon1") and len(address) == 45)
 
 def get_wallet_from_seed(seed_phrase):
     """Create wallet from seed phrase using BIP39/BIP44 derivation"""
@@ -77,10 +78,11 @@ def many_to_one(client):
         print("❌ No seed phrases found in seed.txt")
         return
     
-    recipient = input("Enter recipient Babylon address: ").strip()
-    if not validate_babylon_address(recipient):
-        print("❌ Invalid Babylon address format (should start with bbn1 or babylon1)")
-        return
+    while True:
+        recipient = input("Enter recipient Babylon address: ").strip()
+        if validate_babylon_address(recipient):
+            break
+        print("❌ Invalid address format. Must start with 'bbn1' (43 chars) or 'babylon1' (45 chars)")
     
     for seed in seeds:
         try:
@@ -128,7 +130,7 @@ def one_to_many(client):
     try:
         wallet = get_wallet_from_seed(sender_seed)
         sender_balance = get_balance(client, wallet.address())
-        total_needed = amount * len(recipients)
+        total_needed = amount * len([r for r in recipients if validate_babylon_address(r)])
         
         print(f"\n👤 Sender: {wallet.address()}")
         print(f"   Balance: {sender_balance}ubbn")
