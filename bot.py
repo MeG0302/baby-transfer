@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 from cosmpy.aerial.wallet import LocalWallet
 from cosmpy.aerial.client import LedgerClient, NetworkConfig
 from cosmpy.aerial.tx import Transaction
-from cosmpy.aerial.tx_helpers import prepare_cosmos_sdk_bank_send_msg
+from cosmpy.protos.cosmos.bank.v1beta1.tx_pb2 import MsgSend
+from cosmpy.protos.cosmos.base.v1beta1.coin_pb2 import Coin
 
 # Load .env variables
 load_dotenv()
@@ -69,17 +70,17 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
     # Retry logic
     for attempt in range(1, 4):
         try:
-            msg = prepare_cosmos_sdk_bank_send_msg(
+            msg = MsgSend(
                 from_address=sender_addr,
                 to_address=recipient,
-                amount=amount_ubbn,
-                denom="ubbn"
+                amount=[Coin(denom="ubbn", amount=str(amount_ubbn))]
             )
+
             tx = Transaction()
             tx.add_message(msg)
             tx = tx.with_sender(sender_addr)
             tx = tx.with_chain_id(CHAIN_ID)
-            tx = tx.with_fee(gas=gas_limit, amount=to_ubbn(0.002))
+            tx = tx.with_fee(gas=gas_limit, amount=gas_fee)
             tx_signed = tx.sign(sender_wallet)
 
             tx_resp = client.send_transaction(tx_signed)
