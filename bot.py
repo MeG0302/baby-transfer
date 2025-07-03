@@ -3,6 +3,7 @@ from cosmpy.aerial.wallet import LocalWallet
 from cosmpy.aerial.client import LedgerClient, NetworkConfig
 from cosmpy.aerial.tx import Transaction
 from cosmpy.crypto.keypairs import PrivateKey
+from cosmpy.mnemonic import Mnemonic
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -11,7 +12,7 @@ load_dotenv()
 # Updated Babylon Testnet configuration with correct RPC
 BABYLON_CONFIG = NetworkConfig(
     chain_id=os.getenv("BABYLON_CHAIN_ID", "babylon-2"),
-    url=os.getenv("BABYLON_RPC_URL", "rest+https://babylon-testnet-rpc.nodes.guru"),  # Updated RPC
+    url=os.getenv("BABYLON_RPC_URL", "rest+https://babylon-testnet-rpc.nodes.guru"),
     fee_minimum_gas_price=float(os.getenv("GAS_PRICE", 0.0025)),
     fee_denomination=os.getenv("DENOM", "ubbn"),
     staking_denomination=os.getenv("DENOM", "ubbn"),
@@ -19,7 +20,8 @@ BABYLON_CONFIG = NetworkConfig(
 
 def get_wallet_from_seed(seed_phrase):
     """Create wallet from seed phrase"""
-    private_key = PrivateKey.from_mnemonic(seed_phrase)
+    mnemonic = Mnemonic(seed_phrase)
+    private_key = PrivateKey(mnemonic.to_private_key())  # Correct way to get private key
     return LocalWallet(private_key)
 
 def get_balance(client, address):
