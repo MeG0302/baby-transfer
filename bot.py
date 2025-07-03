@@ -6,7 +6,7 @@ from cosmpy.aerial.wallet import LocalWallet
 from cosmpy.aerial.client import LedgerClient, NetworkConfig
 from cosmpy.aerial.tx import Transaction
 
-# Load .env
+# Load environment
 load_dotenv()
 RPC_URL = os.getenv("RPC_URL")
 CHAIN_ID = os.getenv("CHAIN_ID")
@@ -15,22 +15,22 @@ CHAIN_ID = os.getenv("CHAIN_ID")
 with open("mnemonics.txt", "r") as f:
     MNEMONICS = [line.strip() for line in f if line.strip()]
 
-# Load recipients if needed
+# Load recipients (for One-to-Many)
 def load_recipients():
     with open("wallets.txt", "r") as f:
         return [line.strip() for line in f if line.strip()]
 
-# Setup network
+# Network Configuration (low gas fees for testnet)
 config = NetworkConfig(
     chain_id=CHAIN_ID,
     url=RPC_URL,
-    fee_minimum_gas_price=0.0025,
+    fee_minimum_gas_price=0.001,
     fee_denomination="ubbn",
     staking_denomination="ubbn",
 )
 client = LedgerClient(config)
 
-# Setup logger
+# Logging setup
 log_file = "log.csv"
 if not os.path.exists(log_file):
     with open(log_file, "w", newline="") as f:
@@ -42,15 +42,18 @@ def log_tx(sender, recipient, amount, status, tx_hash="-"):
         writer = csv.writer(f)
         writer.writerow([sender, recipient, amount, status, tx_hash, time.strftime("%Y-%m-%d %H:%M:%S")])
 
-# Convert BBN to ubbn
+# Convert to ubbn
 def to_ubbn(bbn):
     return int(float(bbn) * 1_000_000)
 
-# Send BBN from sender to recipient
+# Token sender
 def send_tokens(sender_wallet, recipient, amount_bbn):
     sender_addr = str(sender_wallet.address())
     amount_ubbn = to_ubbn(amount_bbn)
-    gas_fee = to_ubbn(0.0025) * 100000  # lowered gas + fee for testnet
+
+    gas_limit = 80000
+    gas_price = 0.001
+    gas_fee = to_ubbn(gas_price) * gas_limit
 
     try:
         balance = int(client.query_bank_balance(sender_addr, denom="ubbn"))
@@ -65,28 +68,29 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
         log_tx(sender_addr, recipient, amount_bbn, "Skipped: Low Balance")
         return
 
-    tx = Transaction()
-    tx.add_message(
-        sender_wallet.bank_send(
-            to_address=recipient,
-            amount=amount_ubbn,
-            denom="ubbn"
-        )
-    )
-    tx = tx.with_sender(sender_addr)
-    tx = tx.with_chain_id(CHAIN_ID)
-    tx = tx.with_fee(gas=100000, amount=to_ubbn(0.0025))  # dynamic gas
-    tx_signed = tx.sign(sender_wallet)
-
     try:
+        tx = Transaction()
+        tx.add_message(
+            sender_wallet.bank_send(
+                to_address=recipient,
+                amount=amount_ubbn,
+                denom="ubbn"
+            )
+        )
+        tx = tx.with_sender(sender_addr)
+        tx = tx.with_chain_id(CHAIN_ID)
+        tx = tx.with_fee(gas=gas_limit, amount=to_ubbn(gas_price))
+        tx_signed = tx.sign(sender_wallet)
+
         tx_resp = client.send_transaction(tx_signed)
         print(f"✅ Sent {amount_bbn} BBN from {sender_addr} to {recipient}")
         log_tx(sender_addr, recipient, amount_bbn, "Success", tx_resp.tx_hash)
+
     except Exception as e:
         print(f"❌ Failed from {sender_addr} → {recipient}: {str(e)}")
         log_tx(sender_addr, recipient, amount_bbn, "Failed", str(e))
 
-# Main logic
+# Prompt and flow
 def main():
     print("Choose mode:")
     print("1 - One-to-Many (1 sender to many recipients)")
@@ -98,7 +102,7 @@ def main():
         amount = float(amount)
         assert amount > 0
     except:
-        print("Invalid amount.")
+        print("❌ Invalid amount.")
         return
 
     if mode == "1":
@@ -112,6 +116,7 @@ def main():
         for mnemonic in MNEMONICS:
             wallet = LocalWallet.from_mnemonic(mnemonic, prefix="bbn")
             send_tokens(wallet, recipient, amount)
+
     else:
         print("❌ Invalid mode")
 
