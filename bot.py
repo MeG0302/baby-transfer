@@ -15,7 +15,7 @@ CHAIN_ID = os.getenv("CHAIN_ID")
 with open("mnemonics.txt", "r") as f:
     MNEMONICS = [line.strip() for line in f if line.strip()]
 
-# Load wallets if needed
+# Load recipients
 def load_recipients():
     with open("wallets.txt", "r") as f:
         return [line.strip() for line in f if line.strip()]
@@ -30,7 +30,7 @@ config = NetworkConfig(
 )
 client = LedgerClient(config)
 
-# Log setup
+# Logging
 log_file = "log.csv"
 if not os.path.exists(log_file):
     with open(log_file, "w", newline="") as f:
@@ -42,17 +42,23 @@ def log_tx(sender, recipient, amount, status, tx_hash="-"):
         writer = csv.writer(f)
         writer.writerow([sender, recipient, amount, status, tx_hash, time.strftime("%Y-%m-%d %H:%M:%S")])
 
-# Convert to ubbn
+# Convert BBN → ubbn
 def to_ubbn(bbn):
     return int(float(bbn) * 1_000_000)
 
-# Send BBN
+# Send tokens
 def send_tokens(sender_wallet, recipient, amount_bbn):
     sender_addr = str(sender_wallet.address())
     amount_ubbn = to_ubbn(amount_bbn)
     gas_fee = to_ubbn(0.025) * 2100
 
-    balance = client.query_bank_balance(sender_addr, denom="ubbn").amount
+    try:
+        balance = int(client.query_bank_balance(sender_addr, denom="ubbn"))
+    except Exception as e:
+        print(f"⚠️ Failed to fetch balance for {sender_addr}: {e}")
+        log_tx(sender_addr, recipient, amount_bbn, "Failed: Balance Fetch", str(e))
+        return
+
     if balance < (amount_ubbn + gas_fee):
         print(f"❌ Skipping {sender_addr} - insufficient BBN")
         log_tx(sender_addr, recipient, amount_bbn, "Skipped: Low Balance")
