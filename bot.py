@@ -19,6 +19,10 @@ BABYLON_CONFIG = NetworkConfig(
     staking_denomination=os.getenv("DENOM", "ubbn"),
 )
 
+def validate_babylon_address(address):
+    """Validate Babylon testnet address format"""
+    return address.startswith(("bbn1", "babylon1")) and len(address) == 45
+
 def get_wallet_from_seed(seed_phrase):
     """Create wallet from seed phrase using BIP39/BIP44 derivation"""
     # Generate seed from mnemonic
@@ -74,8 +78,8 @@ def many_to_one(client):
         return
     
     recipient = input("Enter recipient Babylon address: ").strip()
-    if not recipient.startswith("babylon1"):
-        print("❌ Invalid Babylon address format")
+    if not validate_babylon_address(recipient):
+        print("❌ Invalid Babylon address format (should start with bbn1 or babylon1)")
         return
     
     for seed in seeds:
@@ -136,7 +140,7 @@ def one_to_many(client):
         
         for i, addr in enumerate(recipients, 1):
             print(f"\nRecipient {i}/{len(recipients)}: {addr[:10]}...")
-            if not addr.startswith("babylon1"):
+            if not validate_babylon_address(addr):
                 print("⚠️ Invalid address format, skipping")
                 continue
             send_tokens(client, wallet, addr, amount)
