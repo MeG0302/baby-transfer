@@ -1,112 +1,160 @@
 import os
-import csv
-import time
-from dotenv import load_dotenv
 from cosmpy.aerial.wallet import LocalWallet
 from cosmpy.aerial.client import LedgerClient, NetworkConfig
 from cosmpy.aerial.tx import Transaction
-from cosmpy.protos.cosmos.bank.v1beta1.tx_pb2 import MsgSend
-from cosmpy.protos.cosmos.base.v1beta1.coin_pb2 import Coin
+from cosmpy.crypto.keypairs import PrivateKey
+from dotenv import load_dotenv
+import json
 
-# Load .env variables
+# Load environment variables
 load_dotenv()
-RPC_URL = os.getenv("RPC_URL")
-CHAIN_ID = os.getenv("CHAIN_ID")
 
-# Load mnemonics
-with open("mnemonics.txt", "r") as f:
-    MNEMONICS = [line.strip() for line in f if line.strip()]
-
-# Load recipients list
-def load_recipients():
-    with open("wallets.txt", "r") as f:
-        return [line.strip() for line in f if line.strip()]
-
-# Network config
-config = NetworkConfig(
-    chain_id=CHAIN_ID,
-    url=RPC_URL,
-    fee_minimum_gas_price=0.001,
+# Babylon Testnet configuration
+BABYLON_CONFIG = NetworkConfig(
+    chain_id="babylon-2",
+    url="https://rpc.babylon-2.btc.com",
+    fee_minimum_gas_price=0.0025,
     fee_denomination="ubbn",
     staking_denomination="ubbn",
 )
-client = LedgerClient(config)
 
-# Log file setup
-log_file = "log.csv"
-if not os.path.exists(log_file):
-    with open(log_file, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Sender", "Recipient", "Amount", "Status", "TX Hash", "Time"])
+def get_wallet_from_seed(seed_phrase):
+    """Create wallet from seed phrase"""
+    private_key = PrivateKey.from_seed_phrase(seed_phrase)
+    return LocalWallet(private_key)
 
-def log_tx(sender, recipient, amount, status, tx_hash="-"):
-    with open(log_file, "a", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow([sender, recipient, amount, status, tx_hash, time.strftime("%Y-%m-%d %H:%M:%S")])
+def get_balance(client, address):
+    """Get Babylon token balance for an address"""
+    return client.query_bank_balance(address)
 
-def to_ubbn(bbn):
-    return int(float(bbn) * 1_000_000)
+def send_tokens(client, sender_wallet, recipient_address, amount, leave_amount=0.1):
+    """Send tokens from one wallet to another"""
+    sender_balance = client.query_bank_balance(sender_wallet.address())
+    
+    # Calculate amount to send (leave specified amount)
+    if sender_balance <= leave_amount:
+        print(f"Insufficient balance in {sender_wallet.address()} (balance: {sender_balance})")
+        return False
+    
+    amount_to_send = min(amount, sender_balance - leave_amount)
+    
+    tx = Transaction()
+    tx.add_bank_transfer(recipient_address, amount_to_send, "ubbn")
+    
+    # Sign and broadcast transaction
+    tx = client.finalize_and_broadcast(tx, sender_wallet)
+    print(f"Sent {amount_to_send} ubbn from {sender_wallet.address()} to {recipient_address}")
+    print(f"Transaction hash: {tx.tx_hash}")
+    return True
 
-def send_tokens(sender_wallet, recipient, amount_bbn):
-    sender_addr = str(sender_wallet.address())
-    amount_ubbn = to_ubbn(amount_bbn)
-    gas_limit = 80000
-    gas_fee = to_ubbn(0.002)
-
-    # Retry logic
-    for attempt in range(1, 4):
+def many_to_one_transfer(client):
+    """Transfer from many accounts to one account (consolidation)"""
+    print("\n--- Many to One Transfer ---")
+    
+    # Read seed phrases from file
+    try:
+        with open("seed.txt", "r") as f:
+            seed_phrases = [line.strip() for line in f.readlines() if line.strip()]
+    except FileNotFoundError:
+        print("Error: seed.txt file not found")
+        return
+    
+    if not seed_phrases:
+        print("Error: No seed phrases found in seed.txt")
+        return
+    
+    # Get recipient address
+    recipient_address = input("Enter recipient Babylon address: ").strip()
+    
+    # Process each wallet
+    for seed in seed_phrases:
         try:
-            msg = MsgSend(
-                from_address=sender_addr,
-                to_address=recipient,
-                amount=[Coin(denom="ubbn", amount=str(amount_ubbn))]
-            )
-
-            tx = Transaction()
-            tx.add_message(msg)
-            tx = tx.with_sender(sender_addr)
-            tx = tx.with_chain_id(CHAIN_ID)
-            tx = tx.with_fee(gas=gas_limit, amount=gas_fee)
-            tx_signed = tx.sign(sender_wallet)
-
-            tx_resp = client.send_transaction(tx_signed)
-            print(f"✅ Sent {amount_bbn} BBN from {sender_addr} to {recipient}")
-            log_tx(sender_addr, recipient, amount_bbn, "Success", tx_resp.tx_hash)
-            break
-        except Exception as e:
-            print(f"⚠️ Attempt {attempt} failed from {sender_addr} → {recipient}: {str(e)}")
-            if attempt == 3:
-                log_tx(sender_addr, recipient, amount_bbn, "Failed after 3 retries", str(e))
+            wallet = get_wallet_from_seed(seed)
+            balance = get_balance(client, wallet.address())
+            
+            print(f"\nWallet: {wallet.address()}")
+            print(f"Balance: {balance} ubbn")
+            
+            if balance > 0.1:  # Leave 0.1 ubbn in wallet
+                send_tokens(client, wallet, recipient_address, balance)
             else:
-                time.sleep(5)
+                print("Skipping - insufficient balance")
+        except Exception as e:
+            print(f"Error processing wallet: {e}")
+
+def one_to_many_transfer(client):
+    """Transfer from one account to many accounts (distribution)"""
+    print("\n--- One to Many Transfer ---")
+    
+    # Get sender seed phrase
+    sender_seed = input("Enter sender seed phrase: ").strip()
+    if not sender_seed:
+        print("Error: No seed phrase provided")
+        return
+    
+    # Read recipient addresses from file
+    try:
+        with open("wallet.txt", "r") as f:
+            recipient_addresses = [line.strip() for line in f.readlines() if line.strip()]
+    except FileNotFoundError:
+        print("Error: wallet.txt file not found")
+        return
+    
+    if not recipient_addresses:
+        print("Error: No recipient addresses found in wallet.txt")
+        return
+    
+    # Get amount to send to each recipient
+    try:
+        amount_per_recipient = float(input("Enter amount to send to each recipient (in ubbn): ").strip())
+    except ValueError:
+        print("Error: Invalid amount")
+        return
+    
+    # Get sender wallet
+    try:
+        sender_wallet = get_wallet_from_seed(sender_seed)
+        sender_balance = get_balance(client, sender_wallet.address())
+        
+        print(f"\nSender: {sender_wallet.address()}")
+        print(f"Balance: {sender_balance} ubbn")
+        
+        total_needed = amount_per_recipient * len(recipient_addresses)
+        if sender_balance < total_needed + 0.1:  # Leave 0.1 ubbn in sender wallet
+            print(f"Error: Insufficient balance. Need {total_needed} ubbn but have {sender_balance}")
+            return
+        
+        # Send to each recipient
+        for addr in recipient_addresses:
+            send_tokens(client, sender_wallet, addr, amount_per_recipient)
+            
+    except Exception as e:
+        print(f"Error: {e}")
 
 def main():
-    print("Choose mode:")
-    print("1 - One-to-Many (1 sender to many recipients)")
-    print("2 - Many-to-One (many senders to 1 recipient)")
-    mode = input("Enter mode (1 or 2): ").strip()
-
-    amount = input("💰 Enter amount of BBN to send from each wallet: ").strip()
-    try:
-        amount = float(amount)
-        assert amount > 0
-    except:
-        print("❌ Invalid amount entered.")
-        return
-
-    if mode == "1":
-        recipients = load_recipients()
-        sender_wallet = LocalWallet.from_mnemonic(MNEMONICS[0], prefix="bbn")
-        for recipient in recipients:
-            send_tokens(sender_wallet, recipient, amount)
-
-    elif mode == "2":
-        recipient = input("🎯 Enter the recipient wallet address: ").strip()
-        for mnemonic in MNEMONICS:
-            wallet = LocalWallet.from_mnemonic(mnemonic, prefix="bbn")
-            send_tokens(wallet, recipient, amount)
-    else:
-        print("❌ Invalid mode")
+    # Initialize client
+    client = LedgerClient(BABYLON_CONFIG)
+    
+    print("Babylon Testnet Token Transfer Bot")
+    print("--------------------------------")
+    
+    while True:
+        print("\nOptions:")
+        print("1 - From many accounts to one account (consolidation)")
+        print("2 - From one account to many accounts (distribution)")
+        print("3 - Exit")
+        
+        choice = input("Enter your choice (1-3): ").strip()
+        
+        if choice == "1":
+            many_to_one_transfer(client)
+        elif choice == "2":
+            one_to_many_transfer(client)
+        elif choice == "3":
+            print("Exiting...")
+            break
+        else:
+            print("Invalid choice. Please try again.")
 
 if __name__ == "__main__":
     main()
