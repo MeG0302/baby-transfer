@@ -96,14 +96,14 @@ def main():
 
     if mode == "1":
         recipients = load_recipients()
-        sender_wallet = LocalWallet.from_mnemonic(MNEMONICS[0])
+        sender_wallet = LocalWallet.from_mnemonic(MNEMONICS[0], prefix="bbn")
         for recipient in recipients:
             send_tokens(sender_wallet, recipient, amount)
 
     elif mode == "2":
         recipient = input("🎯 Enter the recipient wallet address: ").strip()
         for mnemonic in MNEMONICS:
-            wallet = LocalWallet.from_mnemonic(mnemonic)
+            wallet = LocalWallet.from_mnemonic(mnemonic, prefix="bbn")
             send_tokens(wallet, recipient, amount)
     else:
         print("❌ Invalid mode")
