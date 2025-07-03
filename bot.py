@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 from cosmpy.aerial.wallet import LocalWallet
 from cosmpy.aerial.client import LedgerClient, NetworkConfig
 from cosmpy.aerial.tx import Transaction
-from cosmpy.aerial.tx_helpers import prepare_and_broadcast_basic_transaction
 from cosmpy.protos.cosmos.bank.v1beta1.tx_pb2 import MsgSend
 from cosmpy.protos.cosmos.base.v1beta1.coin_pb2 import Coin
 
@@ -63,16 +62,16 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
                 amount=[Coin(denom="ubbn", amount=str(amount_ubbn))]
             )
 
-            tx_hash = prepare_and_broadcast_basic_transaction(
-                client=client,
-                wallet=sender_wallet,
-                messages=[msg],
-                gas=gas_limit,
-                fee=gas_fee
-            )
+            tx = Transaction()
+            tx.add_message(msg)
+            tx = tx.with_sender(sender_addr)
+            tx = tx.with_chain_id(CHAIN_ID)
+            tx = tx.with_fee(gas=gas_limit, amount=gas_fee)
+            tx_signed = tx.sign(sender_wallet)
 
+            tx_resp = client.send_transaction(tx_signed)
             print(f"✅ Sent {amount_bbn} BBN from {sender_addr} to {recipient}")
-            log_tx(sender_addr, recipient, amount_bbn, "Success", tx_hash)
+            log_tx(sender_addr, recipient, amount_bbn, "Success", tx_resp.tx_hash)
             break
         except Exception as e:
             print(f"⚠️ Attempt {attempt} failed from {sender_addr} → {recipient}: {str(e)}")
@@ -87,7 +86,7 @@ def main():
     print("2 - Many-to-One (many senders to 1 recipient)")
     mode = input("Enter mode (1 or 2): ").strip()
 
-    amount = input("\U0001f4b0 Enter amount of BBN to send from each wallet: ").strip()
+    amount = input("💰 Enter amount of BBN to send from each wallet: ").strip()
     try:
         amount = float(amount)
         assert amount > 0
