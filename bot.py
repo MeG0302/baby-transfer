@@ -54,7 +54,7 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
 
     try:
         balance_obj = client.query_bank_balance(sender_addr, denom="ubbn")
-        balance = int(balance_obj.amount)
+        balance = int(balance_obj) if isinstance(balance_obj, int) else int(balance_obj.amount)
         print(f"🧾 Balance of {sender_addr}: {balance / 1_000_000:.6f} BBN")
     except Exception as e:
         print(f"⚠️ Failed to fetch balance for {sender_addr}: {e}")
