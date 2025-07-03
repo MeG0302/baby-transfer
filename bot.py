@@ -54,8 +54,16 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
     gas_fee = to_ubbn(0.001) * gas_limit
 
     try:
-        balance_resp = client.query_bank_balance(sender_addr, denom="ubbn")
-        balance = int(getattr(balance_resp, "amount", 0))
+        balance_obj = client.query_bank_balance(sender_addr, denom="ubbn")
+
+        # Robustly extract balance
+        if hasattr(balance_obj, "amount"):
+            balance = int(balance_obj.amount)
+        elif isinstance(balance_obj, dict) and "amount" in balance_obj:
+            balance = int(balance_obj["amount"])
+        else:
+            balance = int(balance_obj)  # fallback if it’s just a number
+
         print(f"🧾 Balance of {sender_addr}: {balance / 1_000_000:.6f} BBN")
     except Exception as e:
         print(f"⚠️ Failed to fetch balance for {sender_addr}: {e}")
