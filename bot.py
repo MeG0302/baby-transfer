@@ -6,21 +6,21 @@ from cosmpy.aerial.wallet import LocalWallet
 from cosmpy.aerial.client import LedgerClient, NetworkConfig
 from cosmpy.aerial.tx import Transaction
 
-# Load environment variables
+# Load .env variables
 load_dotenv()
 RPC_URL = os.getenv("RPC_URL")
 CHAIN_ID = os.getenv("CHAIN_ID")
 
-# Load mnemonics from file
+# Load mnemonics
 with open("mnemonics.txt", "r") as f:
     MNEMONICS = [line.strip() for line in f if line.strip()]
 
-# Load recipient wallet list
+# Load recipients list
 def load_recipients():
     with open("wallets.txt", "r") as f:
         return [line.strip() for line in f if line.strip()]
 
-# Set up Babylon testnet client
+# Network config
 config = NetworkConfig(
     chain_id=CHAIN_ID,
     url=RPC_URL,
@@ -30,7 +30,7 @@ config = NetworkConfig(
 )
 client = LedgerClient(config)
 
-# Initialize log file
+# Log file setup
 log_file = "log.csv"
 if not os.path.exists(log_file):
     with open(log_file, "w", newline="") as f:
@@ -42,28 +42,19 @@ def log_tx(sender, recipient, amount, status, tx_hash="-"):
         writer = csv.writer(f)
         writer.writerow([sender, recipient, amount, status, tx_hash, time.strftime("%Y-%m-%d %H:%M:%S")])
 
-# Convert BBN to ubbn
 def to_ubbn(bbn):
     return int(float(bbn) * 1_000_000)
 
-# Send tokens if enough balance
 def send_tokens(sender_wallet, recipient, amount_bbn):
     sender_addr = str(sender_wallet.address())
     amount_ubbn = to_ubbn(amount_bbn)
+    
     gas_limit = 80000
-    gas_fee = to_ubbn(0.001) * gas_limit
+    gas_fee = to_ubbn(0.002)  # Total gas fee = 0.002 BBN (safe estimate)
 
     try:
         balance_obj = client.query_bank_balance(sender_addr, denom="ubbn")
-
-        # Robustly extract balance
-        if hasattr(balance_obj, "amount"):
-            balance = int(balance_obj.amount)
-        elif isinstance(balance_obj, dict) and "amount" in balance_obj:
-            balance = int(balance_obj["amount"])
-        else:
-            balance = int(balance_obj)  # fallback if it’s just a number
-
+        balance = int(balance_obj.amount)
         print(f"🧾 Balance of {sender_addr}: {balance / 1_000_000:.6f} BBN")
     except Exception as e:
         print(f"⚠️ Failed to fetch balance for {sender_addr}: {e}")
@@ -85,7 +76,7 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
     )
     tx = tx.with_sender(sender_addr)
     tx = tx.with_chain_id(CHAIN_ID)
-    tx = tx.with_fee(gas=gas_limit, amount=to_ubbn(0.001))
+    tx = tx.with_fee(gas=gas_limit, amount=to_ubbn(0.002))
     tx_signed = tx.sign(sender_wallet)
 
     try:
@@ -96,7 +87,6 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
         print(f"❌ Failed from {sender_addr} → {recipient}: {str(e)}")
         log_tx(sender_addr, recipient, amount_bbn, "Failed", str(e))
 
-# Main program loop
 def main():
     print("Choose mode:")
     print("1 - One-to-Many (1 sender to many recipients)")
@@ -108,7 +98,7 @@ def main():
         amount = float(amount)
         assert amount > 0
     except:
-        print("Invalid amount.")
+        print("❌ Invalid amount entered.")
         return
 
     if mode == "1":
