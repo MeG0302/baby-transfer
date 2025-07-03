@@ -1,13 +1,13 @@
 import os
 import requests
+import time
+from dotenv import load_dotenv
 from cosmpy.aerial.wallet import LocalWallet
 from cosmpy.aerial.client import LedgerClient, NetworkConfig
 from cosmpy.aerial.tx import Transaction
 from cosmpy.crypto.keypairs import PrivateKey
 from bip32utils import BIP32Key
 from mnemonic import Mnemonic
-from dotenv import load_dotenv
-import time
 
 # Load environment variables
 load_dotenv()
@@ -23,8 +23,7 @@ def get_working_rpc():
     """Find first working RPC endpoint with balance API"""
     for endpoint in RPC_ENDPOINTS:
         try:
-            # Test both node status and balance API
-            test_addr = "bbn1hf9zkqvtfwwfn7e3cw8zwenxgrhfkyqsth22fw"  # Example address
+            test_addr = "bbn1hf9zkqvtfwwfn7e3cw8zwenxgrhfkyqsth22fw"  # Sample Babylon address
             status = requests.get(f"{endpoint}/status", timeout=5)
             balance = requests.get(
                 f"{endpoint}/cosmos/bank/v1beta1/balances/{test_addr}/by_denom?denom=ubbn",
@@ -33,14 +32,14 @@ def get_working_rpc():
             if status.status_code == 200 and balance.status_code in [200, 404]:
                 print(f"✅ Verified RPC: {endpoint}")
                 return endpoint
-        except Exception as e:
+        except Exception:
             continue
-    raise ConnectionError("❌ No working RPC endpoint found. Please check your internet connection.")
+    raise ConnectionError("❌ No working RPC endpoint found.")
 
-# Initialize connection
+# Initialize RPC and network config
 working_rpc = get_working_rpc()
 BABYLON_CONFIG = NetworkConfig(
-    chain_id="bbn-test-5",  # From network response
+    chain_id="bbn-test-5",
     url=f"rest+{working_rpc}",
     fee_minimum_gas_price=0.0025,
     fee_denomination="ubbn",
@@ -48,7 +47,7 @@ BABYLON_CONFIG = NetworkConfig(
 )
 
 def get_wallet_from_seed(seed_phrase):
-    """Create wallet from seed phrase with proper derivation"""
+    """Create Babylon wallet from seed phrase with correct bbn prefix"""
     try:
         mnemo = Mnemonic("english")
         seed = mnemo.to_seed(seed_phrase)
@@ -58,12 +57,14 @@ def get_wallet_from_seed(seed_phrase):
                                .ChildKey(0 + 0x80000000) \
                                .ChildKey(0) \
                                .ChildKey(0)
-        return LocalWallet(PrivateKey(bip32_child.PrivateKey()))
+        wallet = LocalWallet(PrivateKey(bip32_child.PrivateKey()))
+        wallet.set_bech32_prefix("bbn")  # Force correct prefix
+        return wallet
     except Exception as e:
         raise Exception(f"Wallet creation failed: {str(e)}")
 
 def get_balance(address):
-    """Updated balance query with correct API path"""
+    """Query wallet balance with retry logic"""
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -74,7 +75,7 @@ def get_balance(address):
             if response.status_code == 200:
                 return float(response.json()['balance']['amount'])
             elif response.status_code == 404:
-                return 0.0  # Address exists but has zero balance
+                return 0.0
             raise Exception(f"API returned {response.status_code}")
         except Exception as e:
             if attempt == max_retries - 1:
@@ -82,7 +83,7 @@ def get_balance(address):
             time.sleep(2)
 
 def send_tokens(client, sender_wallet, recipient, amount, leave_amount=0.1):
-    """Send tokens with enhanced error handling"""
+    """Send tokens with error handling"""
     try:
         balance = get_balance(sender_wallet.address())
         if balance <= leave_amount:
@@ -102,7 +103,7 @@ def send_tokens(client, sender_wallet, recipient, amount, leave_amount=0.1):
         return False
 
 def many_to_one(client):
-    """Consolidate funds from multiple wallets to one"""
+    """Transfer all funds from many wallets to one recipient"""
     print("\n🔀 MANY-TO-ONE TRANSFER MODE")
     try:
         with open("seed.txt") as f:
@@ -138,7 +139,7 @@ def many_to_one(client):
             print(f"❌ Error processing wallet: {str(e)}")
 
 def one_to_many(client):
-    """Distribute funds from one wallet to many"""
+    """Send fixed amount from one wallet to many recipients"""
     print("\n🔀 ONE-TO-MANY TRANSFER MODE")
     sender_seed = input("Enter sender seed phrase: ").strip()
     if not sender_seed:
