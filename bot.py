@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 from cosmpy.aerial.wallet import LocalWallet
 from cosmpy.aerial.client import LedgerClient, NetworkConfig
 from cosmpy.aerial.tx import Transaction
-from cosmpy.aerial.tx_helpers import submit_signed_transaction
 
 # Load env
 load_dotenv()
@@ -73,7 +72,7 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
     tx_signed = tx.sign(sender_wallet)
 
     try:
-        tx_resp = submit_signed_transaction(tx_signed, client)
+        tx_resp = client.send_transaction(tx_signed)
         print(f"✅ Sent {amount_bbn} BBN from {sender_addr} to {recipient}")
         log_tx(sender_addr, recipient, amount_bbn, "Success", tx_resp.tx_hash)
     except Exception as e:
