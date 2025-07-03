@@ -20,14 +20,20 @@ RPC_ENDPOINTS = [
 ]
 
 def get_working_rpc():
-    """Find first working RPC endpoint"""
+    """Find first working RPC endpoint with balance API"""
     for endpoint in RPC_ENDPOINTS:
         try:
-            response = requests.get(f"{endpoint}/status", timeout=5)
-            if response.status_code == 200:
-                print(f"✅ Connected to RPC: {endpoint}")
+            # Test both node status and balance API
+            test_addr = "bbn1hf9zkqvtfwwfn7e3cw8zwenxgrhfkyqsth22fw"  # Example address
+            status = requests.get(f"{endpoint}/status", timeout=5)
+            balance = requests.get(
+                f"{endpoint}/cosmos/bank/v1beta1/balances/{test_addr}/by_denom?denom=ubbn",
+                timeout=5
+            )
+            if status.status_code == 200 and balance.status_code in [200, 404]:
+                print(f"✅ Verified RPC: {endpoint}")
                 return endpoint
-        except:
+        except Exception as e:
             continue
     raise ConnectionError("❌ No working RPC endpoint found. Please check your internet connection.")
 
@@ -57,23 +63,22 @@ def get_wallet_from_seed(seed_phrase):
         raise Exception(f"Wallet creation failed: {str(e)}")
 
 def get_balance(address):
-    """Direct API balance query with retries"""
+    """Updated balance query with correct API path"""
     max_retries = 3
     for attempt in range(max_retries):
         try:
             response = requests.get(
-                f"{working_rpc}/cosmos/bank/v1beta1/balances/{address}",
+                f"{working_rpc}/cosmos/bank/v1beta1/balances/{address}/by_denom?denom=ubbn",
                 timeout=10
             )
             if response.status_code == 200:
-                for balance in response.json().get('balances', []):
-                    if balance['denom'] == 'ubbn':
-                        return float(balance['amount'])
-                return 0.0
+                return float(response.json()['balance']['amount'])
+            elif response.status_code == 404:
+                return 0.0  # Address exists but has zero balance
             raise Exception(f"API returned {response.status_code}")
         except Exception as e:
             if attempt == max_retries - 1:
-                raise Exception(f"Balance query failed after {max_retries} attempts: {str(e)}")
+                raise Exception(f"Balance query failed: {str(e)}")
             time.sleep(2)
 
 def send_tokens(client, sender_wallet, recipient, amount, leave_amount=0.1):
