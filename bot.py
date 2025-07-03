@@ -53,20 +53,6 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
     gas_limit = 80000
     gas_fee = to_ubbn(0.002)
 
-    try:
-        balance_obj = client.query_bank_balance(sender_addr, denom="ubbn")
-        balance = int(balance_obj.amount)
-        print(f"🧾 Balance of {sender_addr}: {balance / 1_000_000:.6f} BBN")
-    except Exception as e:
-        print(f"⚠️ Failed to fetch balance for {sender_addr}: {e}")
-        log_tx(sender_addr, recipient, amount_bbn, "Failed: Balance Fetch", str(e))
-        return
-
-    if balance < (amount_ubbn + gas_fee):
-        print(f"❌ Skipping {sender_addr} - insufficient BBN (has {balance / 1_000_000:.6f})")
-        log_tx(sender_addr, recipient, amount_bbn, "Skipped: Low Balance")
-        return
-
     # Retry logic
     for attempt in range(1, 4):
         try:
@@ -88,7 +74,7 @@ def send_tokens(sender_wallet, recipient, amount_bbn):
             log_tx(sender_addr, recipient, amount_bbn, "Success", tx_resp.tx_hash)
             break
         except Exception as e:
-            print(f"⚠️ Attempt {attempt} failed for {sender_addr} → {recipient}: {str(e)}")
+            print(f"⚠️ Attempt {attempt} failed from {sender_addr} → {recipient}: {str(e)}")
             if attempt == 3:
                 log_tx(sender_addr, recipient, amount_bbn, "Failed after 3 retries", str(e))
             else:
